@@ -1,28 +1,26 @@
 @import "tailwindcss";
 
-/* 기본 라이트 모드 */
+/* 기본 라이트 모드 (모든 디자인은 라이트 기준으로 잡습니다) */
 html {
-  background-color: white !important;
-  color: black !important;
+  background-color: white;
+  color: black;
   color-scheme: light;
 }
 
 body {
   min-height: 100vh;
-  background-color: white !important;
-  color: black !important;
+  background-color: white;
+  color: inherit;
 }
 
-/* 다크 모드 */
+/* 다크 모드: 전체 화면 색상을 반전시켜,
+   원래 검은색이던 건 흰색으로, 흰색이던 건 검은색으로 바뀌게 합니다. */
 html.dark {
-  background-color: black !important;
-  color: white !important;
   color-scheme: dark;
 }
 
 html.dark body {
-  background-color: black !important;
-  color: white !important;
+  filter: invert(1) hue-rotate(180deg);
 }
 
 @layer base {
@@ -31,7 +29,8 @@ html.dark body {
   }
 
   a {
-    @apply text-blue-600 hover:text-blue-500 transition-colors underline-offset-2;
+    color: inherit;
+    @apply transition-colors underline-offset-2;
   }
 }
 

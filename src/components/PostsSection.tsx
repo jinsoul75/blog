@@ -153,7 +153,7 @@ export function PostsSection({ posts }: PostsSectionProps) {
                   <td className="py-4 px-4 text-left w-full">
                     <Link
                       href={`/posts/${slug}`}
-                      className="text-sm font-medium text-neutral-900 dark:text-neutral-100 hover:text-sky-600 dark:hover:text-sky-400 transition-colors cursor-pointer"
+                      className="text-sm font-medium text-black dark:text-white hover:text-sky-600 dark:hover:text-sky-400 transition-colors cursor-pointer"
                     >
                       {title}
                     </Link>
