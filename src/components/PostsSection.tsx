@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
+import { useTheme } from "next-themes";
 
 type PostsSectionProps = {
   posts: PageObjectResponse[];
@@ -42,6 +43,7 @@ function getPostCategory(post: PageObjectResponse): Category | "기타" {
 }
 
 export function PostsSection({ posts }: PostsSectionProps) {
+  const { resolvedTheme } = useTheme();
   const [selectedCategory, setSelectedCategory] =
     useState<Category>(DEFAULT_CATEGORY);
   const [currentPage, setCurrentPage] = useState(1);
@@ -153,7 +155,10 @@ export function PostsSection({ posts }: PostsSectionProps) {
                   <td className="py-4 px-4 text-left w-full">
                     <Link
                       href={`/posts/${slug}`}
-                      className="text-sm font-medium text-black dark:text-white hover:text-sky-600 dark:hover:text-sky-400 transition-colors cursor-pointer"
+                      className="text-sm font-medium hover:text-sky-600 dark:hover:text-sky-400 transition-colors cursor-pointer"
+                      style={{
+                        color: resolvedTheme === "dark" ? "#ffffff" : "#000000",
+                      }}
                     >
                       {title}
                     </Link>
