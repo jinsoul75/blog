@@ -4,6 +4,7 @@ import type {
   PageObjectResponse,
   QueryDatabaseResponse,
 } from '@notionhq/client/build/src/api-endpoints';
+import { getPostSlugFromTitle } from "./slug";
 
 const isFullPageObject = (
   entry: QueryDatabaseResponse['results'][number],
@@ -69,7 +70,7 @@ export const getPublishedPosts = async (): Promise<PageObjectResponse[]> => {
 
 /**
  * 슬러그(slug)를 이용해 특정 포스트의 페이지 정보를 가져옵니다.
- * Notion 데이터베이스에 'Slug' (Rich Text) 속성이 있다고 가정합니다.
+ * slug는 Notion title 속성으로부터 생성해서 비교합니다.
  */
 export const getPostBySlug = async (
   slug: string,
@@ -79,12 +80,17 @@ export const getPostBySlug = async (
     // 슬러그가 비어 있으면 Notion 쿼리를 날리지 않고 바로 null 반환
     return null;
   }
+  const decodedSlug = (() => {
+    try {
+      return decodeURIComponent(normalizedSlug).toLowerCase();
+    } catch {
+      return normalizedSlug.toLowerCase();
+    }
+  })();
 
   const databaseId = normalizeDatabaseId(process.env.NOTION_DATABASE_ID);
 
   try {
-    // 슬러그 필터가 실제 속성 이름/타입과 다를 수 있으므로,
-    // 전체 결과를 가져온 뒤 코드에서 슬러그를 비교합니다.
     const response = await notion.databases.query({
       database_id: databaseId,
     });
@@ -92,25 +98,7 @@ export const getPostBySlug = async (
     const fullPages = response.results.filter(isFullPageObject);
 
     const matchedPage = fullPages.find((page) => {
-      const properties = page.properties as PageObjectResponse["properties"];
-      const slugProperty =
-        (properties as Record<string, PageObjectResponse["properties"][string]>)
-          .slug ??
-        (properties as Record<string, PageObjectResponse["properties"][string]>)
-          .Slug;
-
-      if (slugProperty?.type === "rich_text") {
-        const value =
-          slugProperty.rich_text[0]?.plain_text?.trim().toLowerCase();
-        return value === normalizedSlug.toLowerCase();
-      }
-
-      if (slugProperty?.type === "title") {
-        const value = slugProperty.title[0]?.plain_text?.trim().toLowerCase();
-        return value === normalizedSlug.toLowerCase();
-      }
-
-      return false;
+      return getPostSlugFromTitle(page) === decodedSlug;
     });
 
     if (!matchedPage) {
@@ -173,25 +161,11 @@ export const getPostMarkdownBySlug = async (
 };
 
 /**
- * 포스트에서 slug를 추출합니다.
+ * 포스트에서 제목 기반 slug를 추출합니다.
  */
 const getPostSlug = (page: PageObjectResponse): string | null => {
-  const properties = page.properties as PageObjectResponse["properties"];
-  const slugProperty =
-    (properties as Record<string, PageObjectResponse["properties"][string]>)
-      .slug ??
-    (properties as Record<string, PageObjectResponse["properties"][string]>)
-      .Slug;
-
-  if (slugProperty?.type === "rich_text") {
-    return slugProperty.rich_text[0]?.plain_text?.trim().toLowerCase() || null;
-  }
-
-  if (slugProperty?.type === "title") {
-    return slugProperty.title[0]?.plain_text?.trim().toLowerCase() || null;
-  }
-
-  return null;
+  const slug = getPostSlugFromTitle(page);
+  return slug || null;
 };
 
 /**

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
+import { getPostSlugFromTitle, getPostTitleText } from "@/lib/slug";
 
 type PostsSectionProps = {
   posts: PageObjectResponse[];
@@ -110,14 +111,8 @@ export function PostsSection({ posts }: PostsSectionProps) {
         <table className="w-4/5 mx-auto border-collapse">
           <tbody>
             {paginatedPosts.map((post: PageObjectResponse) => {
-              const titleProperty = post.properties.title;
               const dateProperty = post.properties["Publication Date"];
-              const slugProperty = post.properties.slug;
-
-              const title =
-                titleProperty?.type === "title"
-                  ? titleProperty.title[0]?.plain_text ?? "Untitled"
-                  : "Untitled";
+              const title = getPostTitleText(post);
 
               const dateValue =
                 dateProperty?.type === "date"
@@ -132,10 +127,7 @@ export function PostsSection({ posts }: PostsSectionProps) {
                   })
                 : "Date not set";
 
-              const slug =
-                slugProperty?.type === "rich_text"
-                  ? slugProperty.rich_text[0]?.plain_text
-                  : undefined;
+              const slug = getPostSlugFromTitle(post);
 
               if (!slug) {
                 return null;
@@ -230,4 +222,3 @@ export function PostsSection({ posts }: PostsSectionProps) {
     </>
   );
 }
-

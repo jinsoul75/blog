@@ -6,8 +6,8 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import { CodeBlock } from "@/components/CodeBlock";
 
-// SSG: 빌드 시 모든 페이지를 정적으로 생성
-export const dynamicParams = false;
+// 제목 기반 slug를 사용하므로 동적 라우팅을 허용
+export const dynamicParams = true;
 
 // SSG를 사용하므로 revalidate 제거 (또는 false로 설정)
 // ISR을 원한다면 revalidate 값을 설정
