@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
-import { useTheme } from "next-themes";
 
 type PostsSectionProps = {
   posts: PageObjectResponse[];
@@ -43,7 +42,6 @@ function getPostCategory(post: PageObjectResponse): Category | "기타" {
 }
 
 export function PostsSection({ posts }: PostsSectionProps) {
-  const { resolvedTheme } = useTheme();
   const [selectedCategory, setSelectedCategory] =
     useState<Category>(DEFAULT_CATEGORY);
   const [currentPage, setCurrentPage] = useState(1);
@@ -51,13 +49,14 @@ export function PostsSection({ posts }: PostsSectionProps) {
   const filteredPosts = useMemo(() => {
     const donePosts = posts.filter(isDoneStatus);
 
-    if (selectedCategory === "전체") {
-      return donePosts;
-    }
+    const result =
+      selectedCategory === "전체"
+        ? donePosts
+        : donePosts.filter(
+            (post) => getPostCategory(post) === selectedCategory,
+          );
 
-    return donePosts.filter(
-      (post) => getPostCategory(post) === selectedCategory,
-    );
+    return result;
   }, [posts, selectedCategory]);
 
   const totalPages = Math.max(
@@ -110,7 +109,7 @@ export function PostsSection({ posts }: PostsSectionProps) {
       <div className="overflow-x-auto">
         <table className="w-4/5 mx-auto border-collapse">
           <tbody>
-            {paginatedPosts.map((post) => {
+            {paginatedPosts.map((post: PageObjectResponse) => {
               const titleProperty = post.properties.title;
               const dateProperty = post.properties["Publication Date"];
               const slugProperty = post.properties.slug;
@@ -147,7 +146,7 @@ export function PostsSection({ posts }: PostsSectionProps) {
               return (
                 <tr
                   key={post.id}
-                  className="border-b border-neutral-100 dark:border-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-colors"
+                  className="border-b border-neutral-100 dark:border-neutral-900"
                 >
                   <td className="py-4 px-4 text-sm text-neutral-500 dark:text-neutral-400 whitespace-nowrap w-0 align-middle">
                     {date}
@@ -155,12 +154,11 @@ export function PostsSection({ posts }: PostsSectionProps) {
                   <td className="py-4 px-4 text-left w-full">
                     <Link
                       href={`/posts/${slug}`}
-                      className="text-sm font-medium hover:text-sky-600 dark:hover:text-sky-400 transition-colors cursor-pointer"
-                      style={{
-                        color: resolvedTheme === "dark" ? "#ffffff" : "#000000",
-                      }}
+                      className="block cursor-pointer"
                     >
-                      {title}
+                      <span className="text-sm font-medium text-black dark:text-white">
+                        {title}
+                      </span>
                     </Link>
                   </td>
                   <td className="py-4 px-4 text-right align-middle whitespace-nowrap w-32">

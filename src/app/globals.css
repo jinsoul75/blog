@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* 기본 라이트 모드 (모든 디자인은 라이트 기준) */
 html {
@@ -51,5 +52,49 @@ html.dark body {
 
   .card-meta {
     @apply text-xs text-neutral-500 dark:text-neutral-400;
+  }
+
+  /* Notion details/summary 스타일 */
+  details {
+    @apply my-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900;
+  }
+
+  summary {
+    @apply cursor-pointer font-semibold text-neutral-900 hover:text-neutral-700 dark:text-neutral-100 dark:hover:text-neutral-300;
+  }
+
+  details[open] summary {
+    @apply mb-2;
+  }
+
+  /* details 안의 리스트 스타일 */
+  details ul,
+  details ol {
+    @apply my-2 ml-6 list-outside;
+  }
+
+  details ul {
+    @apply list-disc;
+  }
+
+  details ol {
+    @apply list-decimal;
+  }
+
+  details li {
+    @apply my-1;
+  }
+
+  details li p {
+    @apply my-0;
+  }
+
+  /* Notion callout 스타일 (blockquote with emoji) */
+  blockquote {
+    @apply my-4 rounded-lg border-l-4 border-sky-500 bg-sky-50/50 p-4 dark:bg-sky-950/20;
+  }
+
+  blockquote p {
+    @apply my-0;
   }
 }

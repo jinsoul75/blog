@@ -1,4 +1,5 @@
 import { Client } from '@notionhq/client';
+import { NotionToMarkdown } from "notion-to-md";
 import type {
   PageObjectResponse,
   QueryDatabaseResponse,
@@ -8,18 +9,12 @@ const isFullPageObject = (
   entry: QueryDatabaseResponse['results'][number],
 ): entry is PageObjectResponse => entry.object === 'page' && 'properties' in entry;
 
-// Debugging: Check if the environment variable is loaded.
-console.log(
-  "Checking Notion Token:",
-  process.env.NOTION_TOKEN
-    ? `Loaded, starts with '${process.env.NOTION_TOKEN.substring(0, 5)}...'`
-    : "NOT LOADED OR UNDEFINED"
-);
-
 // Notion 클라이언트 초기화
 export const notion = new Client({
   auth: process.env.NOTION_TOKEN,
 });
+
+const n2m = new NotionToMarkdown({ notionClient: notion });
 
 /**
  * Notion Database ID를 정규화합니다.
@@ -49,25 +44,10 @@ const normalizeDatabaseId = (id: string | undefined): string => {
  */
 export const getPublishedPosts = async (): Promise<PageObjectResponse[]> => {
   const databaseId = normalizeDatabaseId(process.env.NOTION_DATABASE_ID);
-  
-  // 디버깅: Database ID 확인
-  console.log('Database ID:', databaseId ? `${databaseId.substring(0, 8)}...` : 'NOT SET');
 
   try {
     const response = await notion.databases.query({
       database_id: databaseId,
-      // filter: {
-      //   property: 'Published',
-      //   checkbox: {
-      //     equals: true,
-      //   },
-      // },
-      // sorts: [
-      //   {
-      //     property: 'Date',
-      //     direction: 'descending',
-      //   },
-      // ],
     });
 
     return response.results.filter(isFullPageObject);
@@ -103,24 +83,41 @@ export const getPostBySlug = async (
   const databaseId = normalizeDatabaseId(process.env.NOTION_DATABASE_ID);
 
   try {
+    // 슬러그 필터가 실제 속성 이름/타입과 다를 수 있으므로,
+    // 전체 결과를 가져온 뒤 코드에서 슬러그를 비교합니다.
     const response = await notion.databases.query({
       database_id: databaseId,
-      filter: {
-        // Notion DB에서 slug는 rich_text 속성이라고 가정합니다.
-        // 실제 속성 이름(대소문자 포함)이 다르면 여기 문자열을 맞춰주세요.
-        property: 'slug',
-        rich_text: {
-          equals: normalizedSlug,
-        },
-      },
     });
 
-    const fullPage = response.results.find(isFullPageObject);
-    if (!fullPage) {
+    const fullPages = response.results.filter(isFullPageObject);
+
+    const matchedPage = fullPages.find((page) => {
+      const properties = page.properties as PageObjectResponse["properties"];
+      const slugProperty =
+        (properties as Record<string, PageObjectResponse["properties"][string]>)
+          .slug ??
+        (properties as Record<string, PageObjectResponse["properties"][string]>)
+          .Slug;
+
+      if (slugProperty?.type === "rich_text") {
+        const value =
+          slugProperty.rich_text[0]?.plain_text?.trim().toLowerCase();
+        return value === normalizedSlug.toLowerCase();
+      }
+
+      if (slugProperty?.type === "title") {
+        const value = slugProperty.title[0]?.plain_text?.trim().toLowerCase();
+        return value === normalizedSlug.toLowerCase();
+      }
+
+      return false;
+    });
+
+    if (!matchedPage) {
       return null;
     }
 
-    return fullPage;
+    return matchedPage;
   } catch (error: unknown) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'object_not_found') {
       throw new Error(
@@ -155,4 +152,56 @@ export const getPageBlocks = async (pageId: string) => {
   } while (nextCursor);
 
   return allBlocks;
+};
+
+/**
+ * 특정 슬러그에 해당하는 페이지를 마크다운 문자열로 변환해서 반환합니다.
+ */
+export const getPostMarkdownBySlug = async (
+  slug: string,
+): Promise<{ page: PageObjectResponse; markdown: string } | null> => {
+  const page = await getPostBySlug(slug);
+  if (!page) return null;
+
+  const mdBlocks = await n2m.pageToMarkdown(page.id);
+  const mdString = n2m.toMarkdownString(mdBlocks);
+
+  return {
+    page,
+    markdown: mdString.parent,
+  };
+};
+
+/**
+ * 포스트에서 slug를 추출합니다.
+ */
+const getPostSlug = (page: PageObjectResponse): string | null => {
+  const properties = page.properties as PageObjectResponse["properties"];
+  const slugProperty =
+    (properties as Record<string, PageObjectResponse["properties"][string]>)
+      .slug ??
+    (properties as Record<string, PageObjectResponse["properties"][string]>)
+      .Slug;
+
+  if (slugProperty?.type === "rich_text") {
+    return slugProperty.rich_text[0]?.plain_text?.trim().toLowerCase() || null;
+  }
+
+  if (slugProperty?.type === "title") {
+    return slugProperty.title[0]?.plain_text?.trim().toLowerCase() || null;
+  }
+
+  return null;
+};
+
+/**
+ * 모든 포스트의 slug 목록을 가져옵니다. (SSG용)
+ */
+export const getAllPostSlugs = async (): Promise<string[]> => {
+  const posts = await getPublishedPosts();
+  const slugs = posts
+    .map(getPostSlug)
+    .filter((slug): slug is string => slug !== null);
+
+  return slugs;
 };
