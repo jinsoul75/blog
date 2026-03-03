@@ -16,6 +16,7 @@ const DEFAULT_CATEGORY: Category = "전체";
 const POSTS_PER_PAGE = 9;
 
 type PageProperties = PageObjectResponse["properties"];
+const ALL_TAG = "전체";
 
 function isDoneStatus(post: PageObjectResponse): boolean {
   const properties = post.properties as PageProperties;
@@ -42,23 +43,50 @@ function getPostCategory(post: PageObjectResponse): Category | "기타" {
   return "기타";
 }
 
+function getPostTags(post: PageObjectResponse): string[] {
+  const properties = post.properties as PageProperties;
+  const tagProperty =
+    (properties as Record<string, PageProperties[string]>).Tags ??
+    (properties as Record<string, PageProperties[string]>).Tag;
+
+  if (tagProperty?.type === "multi_select") {
+    return tagProperty.multi_select
+      .map((item) => item.name?.trim())
+      .filter((name): name is string => Boolean(name));
+  }
+
+  if (tagProperty?.type === "select" && tagProperty.select?.name) {
+    return [tagProperty.select.name];
+  }
+
+  return [];
+}
+
 export function PostsSection({ posts }: PostsSectionProps) {
   const [selectedCategory, setSelectedCategory] =
     useState<Category>(DEFAULT_CATEGORY);
+  const [selectedTag, setSelectedTag] = useState(ALL_TAG);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const donePosts = useMemo(() => posts.filter(isDoneStatus), [posts]);
+
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    donePosts.forEach((post) => {
+      getPostTags(post).forEach((tag) => tagSet.add(tag));
+    });
+    return [ALL_TAG, ...Array.from(tagSet).sort((a, b) => a.localeCompare(b))];
+  }, [donePosts]);
+
   const filteredPosts = useMemo(() => {
-    const donePosts = posts.filter(isDoneStatus);
-
-    const result =
-      selectedCategory === "전체"
-        ? donePosts
-        : donePosts.filter(
-            (post) => getPostCategory(post) === selectedCategory,
-          );
-
-    return result;
-  }, [posts, selectedCategory]);
+    return donePosts.filter((post) => {
+      const matchCategory =
+        selectedCategory === "전체" || getPostCategory(post) === selectedCategory;
+      const matchTag =
+        selectedTag === ALL_TAG || getPostTags(post).includes(selectedTag);
+      return matchCategory && matchTag;
+    });
+  }, [donePosts, selectedCategory, selectedTag]);
 
   const totalPages = Math.max(
     1,
@@ -75,6 +103,11 @@ export function PostsSection({ posts }: PostsSectionProps) {
 
   const handleChangeCategory = (category: Category) => {
     setSelectedCategory(category);
+    setCurrentPage(1);
+  };
+
+  const handleChangeTag = (tag: string) => {
+    setSelectedTag(tag);
     setCurrentPage(1);
   };
 
@@ -107,6 +140,27 @@ export function PostsSection({ posts }: PostsSectionProps) {
         })}
       </nav>
 
+      <nav className="mb-8 flex flex-wrap items-center justify-center gap-2">
+        {availableTags.map((tag) => {
+          const isActive = tag === selectedTag;
+          return (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => handleChangeTag(tag)}
+              className={[
+                "rounded-full px-3 py-1 text-xs font-medium transition cursor-pointer",
+                isActive
+                  ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
+                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700",
+              ].join(" ")}
+            >
+              #{tag}
+            </button>
+          );
+        })}
+      </nav>
+
       <div className="overflow-x-auto">
         <table className="w-4/5 mx-auto border-collapse">
           <tbody>
@@ -128,6 +182,7 @@ export function PostsSection({ posts }: PostsSectionProps) {
                 : "Date not set";
 
               const slug = getPostSlugFromTitle(post);
+              const tags = getPostTags(post);
 
               if (!slug) {
                 return null;
@@ -152,6 +207,18 @@ export function PostsSection({ posts }: PostsSectionProps) {
                         {title}
                       </span>
                     </Link>
+                    {tags.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {tags.map((tag) => (
+                          <span
+                            key={`${post.id}-${tag}`}
+                            className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td className="py-4 px-4 text-right align-middle whitespace-nowrap w-32">
                     <span className="inline-flex items-center justify-center rounded-full bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-600 ring-1 ring-neutral-200 dark:bg-neutral-900 dark:text-neutral-300 dark:ring-neutral-700 min-w-18">

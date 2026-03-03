@@ -5,6 +5,9 @@ import { notFound } from "next/navigation";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import { CodeBlock } from "@/components/CodeBlock";
+import { PostNavigator, type TocItem } from "@/components/PostNavigator";
+import { createSlugFromTitle } from "@/lib/slug";
+import { Children, isValidElement, type ReactNode } from "react";
 
 // 제목 기반 slug를 사용하므로 동적 라우팅을 허용
 export const dynamicParams = true;
@@ -44,6 +47,19 @@ const getPostDate = (page: PageObjectResponse) => {
   return "Date not set";
 };
 
+const getNodeText = (node: ReactNode): string => {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(getNodeText).join("");
+  }
+  if (isValidElement(node)) {
+    return getNodeText(node.props.children as ReactNode);
+  }
+  return "";
+};
+
 // SSG: 빌드 시 생성할 모든 경로를 반환
 export async function generateStaticParams() {
   const slugs = await getAllPostSlugs();
@@ -68,74 +84,116 @@ export default async function PostPage({
   const { page, markdown } = result;
   const title = getPostTitle(page);
   const date = getPostDate(page);
+  const headingIdMap = new Map<string, number>();
+  const tocItems: TocItem[] = [];
+  const getHeadingId = (text: string) => {
+    const base = createSlugFromTitle(text) || "section";
+    const current = headingIdMap.get(base) ?? 0;
+    headingIdMap.set(base, current + 1);
+    return current === 0 ? base : `${base}-${current}`;
+  };
 
   return (
     <main>
       <div className="page-inner">
-        <article className="mx-auto w-full max-w-3xl">
-          <header className="mb-10 space-y-3">
-            <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
-              <Link
-                href="/"
-                className="cursor-pointer underline-offset-2 hover:underline"
-              >
-                ← 글 목록으로
-              </Link>
-              <span>{date}</span>
-            </div>
-            <h1 className="text-balance text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white sm:text-4xl md:text-5xl">
-              {title}
-            </h1>
-          </header>
+        <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <article className="w-full max-w-3xl">
+            <header className="mb-10 space-y-3">
+              <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
+                <Link
+                  href="/"
+                  className="cursor-pointer underline-offset-2 hover:underline"
+                >
+                  ← 글 목록으로
+                </Link>
+                <span>{date}</span>
+              </div>
+              <h1 className="text-balance text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white sm:text-4xl md:text-5xl">
+                {title}
+              </h1>
+            </header>
 
-          <section className="prose prose-sky mx-auto max-w-none text-neutral-900 lg:prose-lg dark:prose-invert dark:text-neutral-100">
-            <ReactMarkdown
-              rehypePlugins={[rehypeRaw]}
-              components={{
-                // HTML 태그를 직접 렌더링하도록 허용
-                h1: ({ children, ...props }) => (
-                  <h1 className="mt-8 mb-4 text-3xl font-bold text-neutral-900 dark:text-white" {...props}>
-                    {children}
-                  </h1>
-                ),
-                h2: ({ children, ...props }) => (
-                  <h2 className="mt-6 mb-3 text-2xl font-bold text-neutral-900 dark:text-white" {...props}>
-                    {children}
-                  </h2>
-                ),
-                h3: ({ children, ...props }) => (
-                  <h3 className="mt-4 mb-2 text-xl font-bold text-neutral-900 dark:text-white" {...props}>
-                    {children}
-                  </h3>
-                ),
-                // 코드 블록 커스텀 렌더링
-                code: ({ className, children, ...props }) => {
-                  const match = /language-(\w+)/.exec(className || "");
-                  const language = match ? match[1] : "";
-                  const codeString = String(children).replace(/\n$/, "");
-                  const inline = !match; // language가 없으면 inline 코드
-
-                  return !inline && language ? (
-                    <CodeBlock language={language}>{codeString}</CodeBlock>
-                  ) : (
-                    <code
-                      className="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800"
-                      {...props}
-                    >
-                      {children}
-                    </code>
-                  );
-                },
-                // pre 태그는 CodeBlock에서 처리하므로 제거
-                pre: ({ children }) => {
-                  return <>{children}</>;
-                },
-              } as Components}
+            <section
+              id="post-content"
+              className="prose prose-sky mx-auto max-w-none text-neutral-900 lg:prose-lg dark:prose-invert dark:text-neutral-100"
             >
-              {markdown}
-            </ReactMarkdown>
-          </section>
-        </article>
+              <ReactMarkdown
+                rehypePlugins={[rehypeRaw]}
+                components={{
+                  // HTML 태그를 직접 렌더링하도록 허용
+                  h1: ({ children, ...props }) => {
+                    const text = Children.toArray(children).map(getNodeText).join("");
+                    const id = getHeadingId(text);
+                    tocItems.push({ id, text: text || "제목", level: 1 });
+                    return (
+                      <h1
+                        id={id}
+                        className="mt-8 mb-4 scroll-mt-24 text-3xl font-bold text-neutral-900 dark:text-white"
+                        {...props}
+                      >
+                        {children}
+                      </h1>
+                    );
+                  },
+                  h2: ({ children, ...props }) => {
+                    const text = Children.toArray(children).map(getNodeText).join("");
+                    const id = getHeadingId(text);
+                    tocItems.push({ id, text: text || "제목", level: 2 });
+                    return (
+                      <h2
+                        id={id}
+                        className="mt-6 mb-3 scroll-mt-24 text-2xl font-bold text-neutral-900 dark:text-white"
+                        {...props}
+                      >
+                        {children}
+                      </h2>
+                    );
+                  },
+                  h3: ({ children, ...props }) => {
+                    const text = Children.toArray(children).map(getNodeText).join("");
+                    const id = getHeadingId(text);
+                    tocItems.push({ id, text: text || "제목", level: 3 });
+                    return (
+                      <h3
+                        id={id}
+                        className="mt-4 mb-2 scroll-mt-24 text-xl font-bold text-neutral-900 dark:text-white"
+                        {...props}
+                      >
+                        {children}
+                      </h3>
+                    );
+                  },
+                  // 코드 블록 커스텀 렌더링
+                  code: ({ className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const language = match ? match[1] : "";
+                    const codeString = String(children).replace(/\n$/, "");
+                    const inline = !match; // language가 없으면 inline 코드
+
+                    return !inline && language ? (
+                      <CodeBlock language={language}>{codeString}</CodeBlock>
+                    ) : (
+                      <code
+                        className="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800"
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    );
+                  },
+                  // pre 태그는 CodeBlock에서 처리하므로 제거
+                  pre: ({ children }) => {
+                    return <>{children}</>;
+                  },
+                } as Components}
+              >
+                {markdown}
+              </ReactMarkdown>
+            </section>
+          </article>
+
+          <PostNavigator rootId="post-content" items={tocItems} />
+        </div>
       </div>
     </main>
   );
