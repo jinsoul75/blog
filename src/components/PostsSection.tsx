@@ -87,8 +87,7 @@ export function PostsSection({
       <p className="result-count" role="status">
         {query || tag
           ? `검색 결과 ${results.length}개의 글`
-          : `${results.length}개의 이야기`}
-        {totalPages > 1 && ` · ${page} / ${totalPages} 페이지`}
+          : `총 ${results.length}개의 글`}
       </p>
       {results.slice((page - 1) * pageSize, page * pageSize).map((post) => {
         const pos = query.trim()
