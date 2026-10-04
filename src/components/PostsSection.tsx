@@ -70,7 +70,6 @@ export function PostsSection({
           onChange={(e) => update(e.target.value, tag)}
         />
       </div>
-      <p className="search-hint">제목 · 본문 · 태그를 함께 검색합니다.</p>
       <nav className="tags" aria-label="태그 필터">
         <button aria-pressed={!tag} onClick={() => update(query, "")}>
           전체
