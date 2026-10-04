@@ -1,14 +1,16 @@
-import { Client } from '@notionhq/client';
+import { Client } from "@notionhq/client";
 import { NotionToMarkdown } from "notion-to-md";
 import type {
   PageObjectResponse,
   QueryDatabaseResponse,
-} from '@notionhq/client/build/src/api-endpoints';
+} from "@notionhq/client/build/src/api-endpoints";
 import { getPostSlugFromTitle } from "./slug";
+import { summarizePost } from "./posts";
 
 const isFullPageObject = (
-  entry: QueryDatabaseResponse['results'][number],
-): entry is PageObjectResponse => entry.object === 'page' && 'properties' in entry;
+  entry: QueryDatabaseResponse["results"][number],
+): entry is PageObjectResponse =>
+  entry.object === "page" && "properties" in entry;
 
 // Notion 클라이언트 초기화
 export const notion = new Client({
@@ -23,7 +25,9 @@ const n2m = new NotionToMarkdown({ notionClient: notion });
  */
 const normalizeDatabaseId = (id: string | undefined): string => {
   if (!id) {
-    throw new Error('NOTION_DATABASE_ID가 .env.local 파일에 설정되지 않았습니다.');
+    throw new Error(
+      "NOTION_DATABASE_ID가 .env.local 파일에 설정되지 않았습니다.",
+    );
   }
 
   // URL 형식인 경우 UUID만 추출
@@ -47,21 +51,36 @@ export const getPublishedPosts = async (): Promise<PageObjectResponse[]> => {
   const databaseId = normalizeDatabaseId(process.env.NOTION_DATABASE_ID);
 
   try {
-    const response = await notion.databases.query({
-      database_id: databaseId,
-    });
-
-    return response.results.filter(isFullPageObject);
+    const pages: PageObjectResponse[] = [];
+    let cursor: string | undefined;
+    do {
+      const response = await notion.databases.query({
+        database_id: databaseId,
+        start_cursor: cursor,
+        page_size: 100,
+        filter: { property: "Status", status: { equals: "Done" } },
+      });
+      pages.push(...response.results.filter(isFullPageObject));
+      cursor = response.has_more
+        ? (response.next_cursor ?? undefined)
+        : undefined;
+    } while (cursor);
+    return pages;
   } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'object_not_found') {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "object_not_found"
+    ) {
       throw new Error(
         `Notion 데이터베이스를 찾을 수 없습니다 (ID: ${databaseId}).\n` +
-        `해결 방법:\n` +
-        `1. Notion에서 데이터베이스 페이지를 엽니다\n` +
-        `2. 우측 상단의 "···" 메뉴를 클릭합니다\n` +
-        `3. "Connections" → Integration을 선택하거나 추가합니다\n` +
-        `4. Integration이 올바른 워크스페이스에 있는지 확인합니다\n` +
-        `   (https://www.notion.so/my-integrations)`
+          `해결 방법:\n` +
+          `1. Notion에서 데이터베이스 페이지를 엽니다\n` +
+          `2. 우측 상단의 "···" 메뉴를 클릭합니다\n` +
+          `3. "Connections" → Integration을 선택하거나 추가합니다\n` +
+          `4. Integration이 올바른 워크스페이스에 있는지 확인합니다\n` +
+          `   (https://www.notion.so/my-integrations)`,
       );
     }
     throw error;
@@ -91,11 +110,7 @@ export const getPostBySlug = async (
   const databaseId = normalizeDatabaseId(process.env.NOTION_DATABASE_ID);
 
   try {
-    const response = await notion.databases.query({
-      database_id: databaseId,
-    });
-
-    const fullPages = response.results.filter(isFullPageObject);
+    const fullPages = await getPublishedPosts();
 
     const matchedPage = fullPages.find((page) => {
       return getPostSlugFromTitle(page) === decodedSlug;
@@ -107,15 +122,20 @@ export const getPostBySlug = async (
 
     return matchedPage;
   } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'object_not_found') {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "object_not_found"
+    ) {
       throw new Error(
         `Notion 데이터베이스를 찾을 수 없습니다 (ID: ${databaseId}).\n` +
-        `해결 방법:\n` +
-        `1. Notion에서 데이터베이스 페이지를 엽니다\n` +
-        `2. 우측 상단의 "···" 메뉴를 클릭합니다\n` +
-        `3. "Connections" → Integration을 선택하거나 추가합니다\n` +
-        `4. Integration이 올바른 워크스페이스에 있는지 확인합니다\n` +
-        `   (https://www.notion.so/my-integrations)`
+          `해결 방법:\n` +
+          `1. Notion에서 데이터베이스 페이지를 엽니다\n` +
+          `2. 우측 상단의 "···" 메뉴를 클릭합니다\n` +
+          `3. "Connections" → Integration을 선택하거나 추가합니다\n` +
+          `4. Integration이 올바른 워크스페이스에 있는지 확인합니다\n` +
+          `   (https://www.notion.so/my-integrations)`,
       );
     }
     throw error;
@@ -126,7 +146,9 @@ export const getPostBySlug = async (
  * 특정 페이지의 모든 블록(콘텐츠)을 가져옵니다.
  */
 export const getPageBlocks = async (pageId: string) => {
-  let allBlocks: Awaited<ReturnType<typeof notion.blocks.children.list>>['results'] = [];
+  let allBlocks: Awaited<
+    ReturnType<typeof notion.blocks.children.list>
+  >["results"] = [];
   let nextCursor: string | null | undefined;
 
   do {
@@ -179,3 +201,16 @@ export const getAllPostSlugs = async (): Promise<string[]> => {
 
   return slugs;
 };
+
+// Build the public search index on the server; never send draft properties or signed image URLs.
+export async function getSearchablePosts() {
+  const pages = await getPublishedPosts();
+  const posts = [];
+  for (const page of pages) {
+    const blocks = await n2m.pageToMarkdown(page.id);
+    posts.push(summarizePost(page, n2m.toMarkdownString(blocks).parent));
+  }
+  return posts
+    .filter((post) => post.slug)
+    .sort((a, b) => b.date.localeCompare(a.date));
+}

@@ -1,199 +1,124 @@
 import { getPostMarkdownBySlug, getAllPostSlugs } from "@/lib/notion";
-import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
+import { summarizePost, formatDate } from "@/lib/posts";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
+import remarkGfm from "remark-gfm";
 import { CodeBlock } from "@/components/CodeBlock";
-import { PostNavigator, type TocItem } from "@/components/PostNavigator";
+import { PostNavigator } from "@/components/PostNavigator";
 import { createSlugFromTitle } from "@/lib/slug";
 import { Children, isValidElement, type ReactNode } from "react";
-
-// 제목 기반 slug를 사용하므로 동적 라우팅을 허용
-export const dynamicParams = true;
-
-// SSG를 사용하므로 revalidate 제거 (또는 false로 설정)
-// ISR을 원한다면 revalidate 값을 설정
-// export const revalidate = 3600;
-
-const getPostTitle = (page: PageObjectResponse) => {
-  const props = page.properties as PageObjectResponse["properties"];
-  const titleProperty =
-    (props as Record<string, PageObjectResponse["properties"][string]>).title ??
-    props.Name;
-
-  if (titleProperty?.type === "title") {
-    return titleProperty.title[0]?.plain_text || "Untitled";
-  }
-
-  return "Untitled";
-};
-
-const getPostDate = (page: PageObjectResponse) => {
-  const props = page.properties as PageObjectResponse["properties"];
-  const dateProperty =
-    (props as Record<string, PageObjectResponse["properties"][string]>)[
-      "Publication Date"
-    ] ?? props.Date;
-
-  if (dateProperty?.type === "date" && dateProperty.date?.start) {
-    return new Date(dateProperty.date.start).toLocaleDateString("ko-KR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  }
-
-  return "Date not set";
-};
-
-const getNodeText = (node: ReactNode): string => {
-  if (typeof node === "string" || typeof node === "number") {
-    return String(node);
-  }
-  if (Array.isArray(node)) {
-    return node.map(getNodeText).join("");
-  }
-  if (isValidElement(node)) {
-    return getNodeText(node.props.children as ReactNode);
-  }
-  return "";
-};
-
-// SSG: 빌드 시 생성할 모든 경로를 반환
+export const revalidate = 1800;
 export async function generateStaticParams() {
-  const slugs = await getAllPostSlugs();
-  
-  return slugs.map((slug) => ({
-    slug: slug,
-  }));
+  return (await getAllPostSlugs()).map((slug) => ({ slug }));
 }
-
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const result = await getPostMarkdownBySlug((await params).slug);
+  if (!result) return {};
+  const post = summarizePost(result.page, result.markdown);
+  return { title: post.title, description: post.excerpt };
+}
+function text(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(text).join("");
+  if (isValidElement<{ children?: ReactNode }>(node))
+    return text(node.props.children);
+  return "";
+}
 export default async function PostPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const { slug } = await params;
-  const result = await getPostMarkdownBySlug(slug);
-
-  if (!result) {
-    notFound();
+  const result = await getPostMarkdownBySlug((await params).slug);
+  if (!result) notFound();
+  const post = summarizePost(result.page, result.markdown);
+  const ids = new Map<string, number>();
+  function id(children: ReactNode) {
+    const base = createSlugFromTitle(text(children)) || "section";
+    const count = ids.get(base) ?? 0;
+    ids.set(base, count + 1);
+    return count ? base + "-" + count : base;
   }
-
-  const { page, markdown } = result;
-  const title = getPostTitle(page);
-  const date = getPostDate(page);
-  const headingIdMap = new Map<string, number>();
-  const tocItems: TocItem[] = [];
-  const getHeadingId = (text: string) => {
-    const base = createSlugFromTitle(text) || "section";
-    const current = headingIdMap.get(base) ?? 0;
-    headingIdMap.set(base, current + 1);
-    return current === 0 ? base : `${base}-${current}`;
-  };
-
   return (
-    <main>
-      <div className="page-inner">
-        <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_260px]">
-          <article className="w-full max-w-3xl">
-            <header className="mb-10 space-y-3">
-              <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
-                <Link
-                  href="/"
-                  className="cursor-pointer underline-offset-2 hover:underline"
-                >
-                  ← 글 목록으로
-                </Link>
-                <span>{date}</span>
-              </div>
-              <h1 className="text-balance text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white sm:text-4xl md:text-5xl">
-                {title}
-              </h1>
-            </header>
-
-            <section
-              id="post-content"
-              className="prose prose-sky mx-auto max-w-none text-neutral-900 lg:prose-lg dark:prose-invert dark:text-neutral-100"
-            >
-              <ReactMarkdown
-                rehypePlugins={[rehypeRaw]}
-                components={{
-                  // HTML 태그를 직접 렌더링하도록 허용
-                  h1: ({ children, ...props }) => {
-                    const text = Children.toArray(children).map(getNodeText).join("");
-                    const id = getHeadingId(text);
-                    tocItems.push({ id, text: text || "제목", level: 1 });
-                    return (
-                      <h1
-                        id={id}
-                        className="mt-8 mb-4 scroll-mt-24 text-3xl font-bold text-neutral-900 dark:text-white"
-                        {...props}
-                      >
-                        {children}
-                      </h1>
-                    );
-                  },
-                  h2: ({ children, ...props }) => {
-                    const text = Children.toArray(children).map(getNodeText).join("");
-                    const id = getHeadingId(text);
-                    tocItems.push({ id, text: text || "제목", level: 2 });
-                    return (
-                      <h2
-                        id={id}
-                        className="mt-6 mb-3 scroll-mt-24 text-2xl font-bold text-neutral-900 dark:text-white"
-                        {...props}
-                      >
-                        {children}
-                      </h2>
-                    );
-                  },
-                  h3: ({ children, ...props }) => {
-                    const text = Children.toArray(children).map(getNodeText).join("");
-                    const id = getHeadingId(text);
-                    tocItems.push({ id, text: text || "제목", level: 3 });
-                    return (
-                      <h3
-                        id={id}
-                        className="mt-4 mb-2 scroll-mt-24 text-xl font-bold text-neutral-900 dark:text-white"
-                        {...props}
-                      >
-                        {children}
-                      </h3>
-                    );
-                  },
-                  // 코드 블록 커스텀 렌더링
-                  code: ({ className, children, ...props }) => {
-                    const match = /language-(\w+)/.exec(className || "");
-                    const language = match ? match[1] : "";
-                    const codeString = String(children).replace(/\n$/, "");
-                    const inline = !match; // language가 없으면 inline 코드
-
-                    return !inline && language ? (
-                      <CodeBlock language={language}>{codeString}</CodeBlock>
-                    ) : (
-                      <code
-                        className="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800"
-                        {...props}
-                      >
-                        {children}
-                      </code>
-                    );
-                  },
-                  // pre 태그는 CodeBlock에서 처리하므로 제거
-                  pre: ({ children }) => {
-                    return <>{children}</>;
-                  },
-                } as Components}
-              >
-                {markdown}
-              </ReactMarkdown>
-            </section>
-          </article>
-
-          <PostNavigator rootId="post-content" items={tocItems} />
+    <main id="main-content" className="reading-shell">
+      <Link className="back-link" href="/#posts">
+        ← 글 목록
+      </Link>
+      <header className="article-header">
+        <div className="post-meta">
+          <span className="category">{post.category}</span>
+          <span>{formatDate(post.date)}</span>
+          <span>{post.minutes}분 읽기</span>
         </div>
+        <h1>{post.title}</h1>
+        <div className="post-tags">
+          {post.tags.map((tag) => (
+            <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}#posts`}>
+              #{tag}
+            </Link>
+          ))}
+        </div>
+      </header>
+      <div className="reading-grid">
+        <article className="article-body">
+          <section
+            id="post-content"
+            className="prose prose-neutral dark:prose-invert max-w-none"
+          >
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw]}
+              components={{
+                h1: ({ children }) => <h1 id={id(children)}>{children}</h1>,
+                h2: ({ children }) => <h2 id={id(children)}>{children}</h2>,
+                h3: ({ children }) => <h3 id={id(children)}>{children}</h3>,
+                pre: ({ children }) => {
+                  const child = Children.toArray(children)[0];
+                  if (
+                    isValidElement<{
+                      className?: string;
+                      children?: ReactNode;
+                    }>(child)
+                  ) {
+                    const lang = /language-([^\s]+)/.exec(
+                      child.props.className ?? "",
+                    )?.[1];
+                    return (
+                      <CodeBlock language={lang}>
+                        {text(child.props.children).replace(/\n$/, "")}
+                      </CodeBlock>
+                    );
+                  }
+                  return <pre>{children}</pre>;
+                },
+                table: ({ children }) => (
+                  <div
+                    className="table-scroll"
+                    tabIndex={0}
+                    role="region"
+                    aria-label="본문 표, 가로 스크롤 가능"
+                  >
+                    <table>{children}</table>
+                  </div>
+                ),
+              }}
+            >
+              {result.markdown}
+            </ReactMarkdown>
+          </section>
+          <div className="article-end">
+            <p>끝까지 읽어주셔서 감사합니다.</p>
+            <Link href="/#posts">다른 이야기 읽기 ↗</Link>
+            <a href="#main-content">맨 위로 ↑</a>
+          </div>
+        </article>
+        <PostNavigator rootId="post-content" />
       </div>
     </main>
   );

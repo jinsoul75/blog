@@ -1,291 +1,175 @@
 "use client";
-
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
-import { getPostSlugFromTitle, getPostTitleText } from "@/lib/slug";
-
-type PostsSectionProps = {
-  posts: PageObjectResponse[];
-};
-
-const CATEGORIES = ["전체", "개발", "회고", "후기"] as const;
-type Category = (typeof CATEGORIES)[number];
-
-const DEFAULT_CATEGORY: Category = "전체";
-const POSTS_PER_PAGE = 9;
-
-type PageProperties = PageObjectResponse["properties"];
-const ALL_TAG = "전체";
-
-function isDoneStatus(post: PageObjectResponse): boolean {
-  const properties = post.properties as PageProperties;
-  const statusProperty = (properties as Record<string, PageProperties[string]>)
-    .Status;
-
-  if (statusProperty?.type === "status") {
-    return statusProperty.status?.name === "Done";
+import { formatDate, matchesPost, type PostSummary } from "@/lib/posts";
+export function PostsSection({
+  posts,
+  basePath = "/",
+}: {
+  posts: PostSummary[];
+  basePath?: string;
+}) {
+  const params = useSearchParams();
+  const query = params.get("q") ?? "";
+  const tag = params.get("tag") ?? "";
+  function update(q: string, t: string) {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (t) p.set("tag", t);
+    history.replaceState(null, "", p.size ? `${basePath}?${p}` : basePath);
   }
-
-  return false;
-}
-
-function getPostCategory(post: PageObjectResponse): Category | "기타" {
-  const categoryProperty = post.properties.Category;
-
-  if (categoryProperty?.type === "select") {
-    const name = categoryProperty.select?.name;
-    if (name === "개발" || name === "회고" || name === "후기") {
-      return name;
-    }
-  }
-
-  return "기타";
-}
-
-function getPostTags(post: PageObjectResponse): string[] {
-  const properties = post.properties as PageProperties;
-  const tagProperty =
-    (properties as Record<string, PageProperties[string]>).Tags ??
-    (properties as Record<string, PageProperties[string]>).Tag;
-
-  if (tagProperty?.type === "multi_select") {
-    return tagProperty.multi_select
-      .map((item) => item.name?.trim())
-      .filter((name): name is string => Boolean(name));
-  }
-
-  if (tagProperty?.type === "select" && tagProperty.select?.name) {
-    return [tagProperty.select.name];
-  }
-
-  return [];
-}
-
-export function PostsSection({ posts }: PostsSectionProps) {
-  const [selectedCategory, setSelectedCategory] =
-    useState<Category>(DEFAULT_CATEGORY);
-  const [selectedTag, setSelectedTag] = useState(ALL_TAG);
-  const [currentPage, setCurrentPage] = useState(1);
-
-  const donePosts = useMemo(() => posts.filter(isDoneStatus), [posts]);
-
-  const availableTags = useMemo(() => {
-    const tagSet = new Set<string>();
-    donePosts.forEach((post) => {
-      getPostTags(post).forEach((tag) => tagSet.add(tag));
-    });
-    return [ALL_TAG, ...Array.from(tagSet).sort((a, b) => a.localeCompare(b))];
-  }, [donePosts]);
-
-  const filteredPosts = useMemo(() => {
-    return donePosts.filter((post) => {
-      const matchCategory =
-        selectedCategory === "전체" || getPostCategory(post) === selectedCategory;
-      const matchTag =
-        selectedTag === ALL_TAG || getPostTags(post).includes(selectedTag);
-      return matchCategory && matchTag;
-    });
-  }, [donePosts, selectedCategory, selectedTag]);
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredPosts.length / POSTS_PER_PAGE),
+  const tags = useMemo(
+    () => Array.from(new Set(posts.flatMap((p) => p.tags))).sort(),
+    [posts],
   );
-
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-
-  const paginatedPosts = useMemo(() => {
-    const start = (safeCurrentPage - 1) * POSTS_PER_PAGE;
-    const end = start + POSTS_PER_PAGE;
-    return filteredPosts.slice(start, end);
-  }, [filteredPosts, safeCurrentPage]);
-
-  const handleChangeCategory = (category: Category) => {
-    setSelectedCategory(category);
-    setCurrentPage(1);
-  };
-
-  const handleChangeTag = (tag: string) => {
-    setSelectedTag(tag);
-    setCurrentPage(1);
-  };
-
-  const handleChangePage = (page: number) => {
-    if (page < 1 || page > totalPages) return;
-    setCurrentPage(page);
-  };
-
+  const results = useMemo(
+    () => posts.filter((p) => matchesPost(p, query, tag)),
+    [posts, query, tag],
+  );
+  const pageSize = 8;
+  const totalPages = Math.max(1, Math.ceil(results.length / pageSize));
+  const requestedPage = Number(params.get("page") ?? 1);
+  const page = Math.min(
+    totalPages,
+    Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1),
+  );
+  const pageNumbers = Array.from(
+    new Set(
+      [1, totalPages, page - 1, page, page + 1].filter(
+        (n) => n >= 1 && n <= totalPages,
+      ),
+    ),
+  ).sort((a, b) => a - b);
+  function changePage(next: number) {
+    if (next < 1 || next > totalPages || next === page) return;
+    const p = new URLSearchParams(params.toString());
+    if (next === 1) p.delete("page");
+    else p.set("page", String(next));
+    history.pushState(null, "", p.size ? `${basePath}?${p}` : basePath);
+    document.getElementById("posts")?.scrollIntoView({ block: "start" });
+  }
   return (
-    <>
-      <nav className="mb-10 flex flex-wrap items-center justify-center gap-2">
-        {CATEGORIES.map((category) => {
-          const isActive = category === selectedCategory;
-
-          return (
-            <button
-              key={category}
-              type="button"
-              onClick={() => handleChangeCategory(category)}
-              className={[
-                "rounded-full px-4 py-1.5 text-sm font-medium transition cursor-pointer",
-                isActive
-                  ? "bg-black text-white shadow-sm dark:bg-white dark:text-black"
-                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700",
-              ].join(" ")}
-            >
-              {category}
-            </button>
-          );
-        })}
-      </nav>
-
-      <nav className="mb-8 flex flex-wrap items-center justify-center gap-2">
-        {availableTags.map((tag) => {
-          const isActive = tag === selectedTag;
-          return (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => handleChangeTag(tag)}
-              className={[
-                "rounded-full px-3 py-1 text-xs font-medium transition cursor-pointer",
-                isActive
-                  ? "bg-neutral-900 text-white dark:bg-white dark:text-black"
-                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700",
-              ].join(" ")}
-            >
-              #{tag}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="overflow-x-auto">
-        <table className="w-4/5 mx-auto border-collapse">
-          <tbody>
-            {paginatedPosts.map((post: PageObjectResponse) => {
-              const dateProperty = post.properties["Publication Date"];
-              const title = getPostTitleText(post);
-
-              const dateValue =
-                dateProperty?.type === "date"
-                  ? dateProperty.date?.start
-                  : undefined;
-
-              const date = dateValue
-                ? new Date(dateValue).toLocaleDateString("ko-KR", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })
-                : "Date not set";
-
-              const slug = getPostSlugFromTitle(post);
-              const tags = getPostTags(post);
-
-              if (!slug) {
-                return null;
-              }
-
-              const category = getPostCategory(post);
-
-              return (
-                <tr
-                  key={post.id}
-                  className="border-b border-neutral-100 dark:border-neutral-900"
-                >
-                  <td className="py-4 px-4 text-sm text-neutral-500 dark:text-neutral-400 whitespace-nowrap w-0 align-middle">
-                    {date}
-                  </td>
-                  <td className="py-4 px-4 text-left w-full">
-                    <Link
-                      href={`/posts/${slug}`}
-                      className="block cursor-pointer"
-                    >
-                      <span className="text-sm font-medium text-black dark:text-white">
-                        {title}
-                      </span>
-                    </Link>
-                    {tags.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {tags.map((tag) => (
-                          <span
-                            key={`${post.id}-${tag}`}
-                            className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300"
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-4 px-4 text-right align-middle whitespace-nowrap w-32">
-                    <span className="inline-flex items-center justify-center rounded-full bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-600 ring-1 ring-neutral-200 dark:bg-neutral-900 dark:text-neutral-300 dark:ring-neutral-700 min-w-18">
-                      {category === "기타" ? "글 보기" : category}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+    <section id="posts" className="archive">
+      <div className="archive-toolbar">
+        <h2>
+          글 목록 <span>{posts.length.toString().padStart(2, "0")}</span>
+        </h2>
+        <span className="muted">최신순으로 모았어요</span>
       </div>
-
-      {filteredPosts.length > 0 && (
-        <div className="mt-12 flex items-center justify-center gap-4 text-xs font-medium text-neutral-600 dark:text-neutral-300">
+      <div className="search-field">
+        <span aria-hidden="true">⌕</span>
+        <label className="sr-only" htmlFor="search">
+          제목, 내용, 태그 검색
+        </label>
+        <input
+          id="search"
+          type="search"
+          placeholder="제목, 본문, 태그로 검색"
+          value={query}
+          onChange={(e) => update(e.target.value, tag)}
+        />
+      </div>
+      <p className="search-hint">제목 · 본문 · 태그를 함께 검색합니다.</p>
+      <nav className="tags" aria-label="태그 필터">
+        <button aria-pressed={!tag} onClick={() => update(query, "")}>
+          전체
+        </button>
+        {tags.map((t) => (
           <button
-            type="button"
-            onClick={() => handleChangePage(currentPage - 1)}
-            disabled={currentPage === 1}
-            className={[
-              "rounded-full px-3 py-1 transition cursor-pointer",
-              currentPage === 1
-                ? "text-neutral-300 cursor-not-allowed dark:text-neutral-600"
-                : "hover:text-black dark:hover:text-white",
-            ].join(" ")}
+            key={t}
+            aria-pressed={tag === t}
+            onClick={() => update(query, tag === t ? "" : t)}
           >
-            이전
+            #{t}
           </button>
-
-          <div className="flex items-center gap-1">
-            {Array.from({ length: totalPages }, (_, index) => {
-              const page = index + 1;
-              const isActive = page === currentPage;
-
-              return (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => handleChangePage(page)}
-                  className={[
-                    "h-7 min-w-7 rounded-full px-2 text-xs font-medium transition cursor-pointer",
-                    isActive
-                      ? "bg-black text-white dark:bg-white dark:text-black"
-                      : "text-neutral-500 hover:text-black dark:text-neutral-400 dark:hover:text-white",
-                  ].join(" ")}
-                >
-                  {page}
+        ))}
+      </nav>
+      <p className="result-count" role="status">
+        {query || tag
+          ? `검색 결과 ${results.length}개의 글`
+          : `${results.length}개의 이야기`}
+        {totalPages > 1 && ` · ${page} / ${totalPages} 페이지`}
+      </p>
+      {results.slice((page - 1) * pageSize, page * pageSize).map((post) => {
+        const pos = query.trim()
+          ? post.text.toLowerCase().indexOf(query.trim().toLowerCase())
+          : -1;
+        const preview =
+          pos > 80
+            ? "…" + post.text.slice(Math.max(0, pos - 45), pos + 140)
+            : post.excerpt;
+        return (
+          <article className="post-row" key={post.id}>
+            <div className="post-meta">
+              <span className="category">{post.category}</span>
+              <span>{formatDate(post.date)}</span>
+              <span>{post.minutes}분 읽기</span>
+            </div>
+            <Link
+              className="post-link"
+              href={`${basePath === "/" ? "/posts" : basePath}/${post.slug}`}
+            >
+              <h3>
+                {post.title}
+                <span aria-hidden="true">↗</span>
+              </h3>
+              <p>
+                {preview}
+                {preview && "…"}
+              </p>
+            </Link>
+            <div className="post-tags">
+              {post.tags.map((t) => (
+                <button key={t} onClick={() => update(query, t)}>
+                  #{t}
                 </button>
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => handleChangePage(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className={[
-              "rounded-full px-3 py-1 transition cursor-pointer",
-              currentPage === totalPages
-                ? "text-neutral-300 cursor-not-allowed dark:text-neutral-600"
-                : "hover:text-black dark:hover:text-white",
-            ].join(" ")}
-          >
-            다음
-          </button>
+              ))}
+            </div>
+          </article>
+        );
+      })}
+      {!results.length && (
+        <div className="empty-state">
+          <h3>찾으시는 글이 아직 없어요</h3>
+          <p>다른 검색어를 입력하거나 태그를 해제해 보세요.</p>
+          <button onClick={() => update("", "")}>전체 글 보기 ↗</button>
         </div>
       )}
-    </>
+      {totalPages > 1 && (
+        <nav className="pagination" aria-label="글 목록 페이지">
+          <button
+            disabled={page === 1}
+            onClick={() => changePage(page - 1)}
+            aria-label="이전 페이지"
+          >
+            ← 이전
+          </button>
+          {pageNumbers.map((n, index) => (
+            <span className="pagination-item" key={n}>
+              {index > 0 && n - pageNumbers[index - 1] > 1 && (
+                <span className="pagination-gap" aria-hidden="true">
+                  …
+                </span>
+              )}
+              <button
+                aria-label={`${n}페이지`}
+                aria-current={page === n ? "page" : undefined}
+                onClick={() => changePage(n)}
+              >
+                {n}
+              </button>
+            </span>
+          ))}
+          <button
+            disabled={page === totalPages}
+            onClick={() => changePage(page + 1)}
+            aria-label="다음 페이지"
+          >
+            다음 →
+          </button>
+        </nav>
+      )}
+    </section>
   );
 }
