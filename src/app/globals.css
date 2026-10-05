@@ -8,6 +8,7 @@
   --line: #e2e5de;
   --accent: #35664f;
   --surface: #f0f2eb;
+  --article-bg: #ffffff;
   --font-body:
     var(--font-geist-sans), -apple-system, BlinkMacSystemFont,
     "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
@@ -19,6 +20,7 @@ html.dark {
   --line: #343e36;
   --accent: #a8c8a5;
   --surface: #232c25;
+  --article-bg: #222a24;
   color-scheme: dark;
 }
 html {
@@ -382,6 +384,11 @@ button {
 }
 .article-body {
   min-width: 0;
+  padding: 32px;
+  background: var(--article-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 3%);
 }
 #post-content {
   font-size: 17px;
@@ -623,6 +630,11 @@ summary {
   }
   .reading-shell {
     padding-top: 30px;
+  }
+  .article-body {
+    margin-inline: -12px;
+    padding: 24px 16px;
+    border-radius: 10px;
   }
   #post-content {
     font-size: 16px;

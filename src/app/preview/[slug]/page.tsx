@@ -34,7 +34,7 @@ export default async function PreviewPost({
       </header>
       <article
         id="post-content"
-        className="prose prose-neutral dark:prose-invert"
+        className="article-body prose prose-neutral dark:prose-invert"
         style={{ maxWidth: 740 }}
       >
         <p>{post.text}</p>
