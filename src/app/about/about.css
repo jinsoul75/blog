@@ -22,7 +22,11 @@
 .about-section h2 { font-size: 23px; font-weight: 600; letter-spacing: -0.8px; }
 .about-section-title > span { font-size: 10px; letter-spacing: 1.5px; color: var(--muted); }
 .about-project { padding: 30px; border: 1px solid var(--line); border-radius: 10px; background: var(--article-bg); }
-.about-project h3 { font-size: 28px; letter-spacing: -1px; font-weight: 600; margin: 18px 0 12px; }
+.about-project + .about-project { margin-top: 20px; }
+.about-project h3 { font-size: 28px; letter-spacing: -1px; font-weight: 600; margin: 18px 0 12px; word-break: keep-all; overflow-wrap: anywhere; }
+.about-skills > div { padding: 16px 0; border-top: 1px solid var(--line); }
+.about-skills dt { font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 8px; }
+.about-skills dd { font-size: 13px; line-height: 1.9; color: var(--muted); }
 .about-project > p:not(.eyebrow), .about-timeline p { font-size: 14px; line-height: 1.9; color: var(--muted); word-break: keep-all; }
 .about-highlights { list-style: disc; padding-left: 18px; margin: 22px 0; font-size: 13px; line-height: 2; }
 .about-stack { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -61,7 +65,9 @@
   .about-signature { display: block; text-align: left; padding: 0; background: none; }
   .about-monogram, .about-signature > span:last-child { display: none; }
   .about-grid { display: block; padding-top: 28px; }
-  .about-section { margin-bottom: 28px; break-inside: avoid; }
+  .about-section { margin-bottom: 28px; }
+  .about-section-title { break-after: avoid; }
+  .about-project, .about-timeline, .about-skills > div { break-inside: avoid; }
   .about-project { padding: 20px; }
   .about-project-links a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 10px; }
 }

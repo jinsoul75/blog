@@ -6,7 +6,7 @@ import "./about.css";
 
 export const metadata: Metadata = {
   title: "About me",
-  description: "Jinsoul의 소개, 프로젝트와 경험을 모은 포트폴리오입니다.",
+  description: "프론트엔드 개발자 김진솔의 포트폴리오. React 기반 데이터 시각화, D3.js·Canvas 성능 개선, 공간분석과 백오피스 개발 경험을 소개합니다.",
 };
 
 export default function AboutPage() {
@@ -25,7 +25,7 @@ export default function AboutPage() {
         <div className="about-signature">
           <span className="about-monogram" aria-hidden="true">j.</span>
           <p>{profile.name}</p>
-          <span>배움과 경험을 쌓는 기록</span>
+          <span>{profile.role}</span>
         </div>
       </header>
 
@@ -33,13 +33,25 @@ export default function AboutPage() {
         <aside className="about-sidebar">
           <p className="eyebrow">CONTENTS</p>
           <nav aria-label="프로필 목차">
-            <a href="#projects">01 <span>프로젝트</span></a>
-            <a href="#experience">02 <span>경력</span></a>
-            <a href="#education">03 <span>교육</span></a>
-            <a href="#contact">04 <span>연결하기</span></a>
+            <a href="#skills">01 <span>기술</span></a>
+            <a href="#projects">02 <span>프로젝트</span></a>
+            <a href="#experience">03 <span>경력</span></a>
+            <a href="#education">04 <span>교육</span></a>
+            <a href="#contact">05 <span>연결하기</span></a>
           </nav>
         </aside>
         <div className="about-content">
+          <section id="skills" className="about-section">
+            <div className="about-section-title"><h2>사용해 온 기술</h2><span>TECHNICAL SKILLS</span></div>
+            <dl className="about-skills">
+              {profile.skills.map((group) => (
+                <div key={group.label}>
+                  <dt>{group.label}</dt>
+                  <dd>{group.items.join(" · ")}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
           <section id="projects" className="about-section">
             <div className="about-section-title"><h2>만들어온 것들</h2><span>SELECTED WORK</span></div>
             {profile.projects.map((project) => (
@@ -49,10 +61,12 @@ export default function AboutPage() {
                 <p>{project.description}</p>
                 <ul className="about-highlights">{project.highlights.map((item) => <li key={item}>{item}</li>)}</ul>
                 <ul className="about-stack" aria-label="프로젝트 사용 기술">{project.stack.map((item) => <li key={item}>{item}</li>)}</ul>
-                <div className="about-project-links">
-                  <Link href={project.href}>사이트 보기 <span aria-hidden="true">↗</span></Link>
-                  <a href={project.source}>GitHub <span aria-hidden="true">↗</span></a>
-                </div>
+                {(project.href || project.source) && (
+                  <div className="about-project-links">
+                    {project.href && <Link href={project.href}>사이트 보기 <span aria-hidden="true">↗</span></Link>}
+                    {project.source && <a href={project.source}>GitHub <span aria-hidden="true">↗</span></a>}
+                  </div>
+                )}
               </article>
             ))}
           </section>
