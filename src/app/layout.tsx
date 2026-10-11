@@ -46,7 +46,11 @@ export default function RootLayout({
             <Link className="wordmark" href="/">
               Jinsoul blog
             </Link>
-            <ThemeToggle />
+            <nav aria-label="주 메뉴">
+              <Link href="/">Blog</Link>
+              <Link href="/about">About me</Link>
+              <ThemeToggle />
+            </nav>
           </header>
           {children}
           <footer className="site-footer">
